@@ -1,74 +1,121 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
-void main() => runApp(MyApp());
+void main() {
+  final timerService = TimerService();
+  runApp(
+    TimerServiceProvider( // provide timer service to all widgets of your app
+      service: timerService,
+      child: MyApp(),
+    ),
+  );
+}
+
+class TimerService extends ChangeNotifier {
+  Stopwatch _watch;
+  Timer _timer;
+
+  Duration get currentDuration => _currentDuration;
+  Duration _currentDuration = Duration.zero;
+
+  bool get isRunning => _timer != null;
+
+  TimerService() {
+    _watch = Stopwatch();
+  }
+
+  void _onTick(Timer timer) {
+    _currentDuration = _watch.elapsed;
+
+    // notify all listening widgets
+    notifyListeners();
+  }
+
+  void start() {
+    if (_timer != null) return;
+
+    _timer = Timer.periodic(Duration(seconds: 1), _onTick);
+    _watch.start();
+
+    notifyListeners();
+  }
+
+  void stop() {
+    _timer?.cancel();
+    _timer = null;
+    _watch.stop();
+    _currentDuration = _watch.elapsed;
+
+    notifyListeners();
+  }
+
+  void reset() {
+    stop();
+    _watch.reset();
+    _currentDuration = Duration.zero;
+
+    notifyListeners();
+  }
+
+  static TimerService of(BuildContext context) {
+    var provider = context.inheritFromWidgetOfExactType(TimerServiceProvider) as TimerServiceProvider;
+    return provider.service;
+  }
+}
+
+class TimerServiceProvider extends InheritedWidget {
+  const TimerServiceProvider({Key key, this.service, Widget child}) : super(key: key, child: child);
+
+  final TimerService service;
+
+  @override
+  bool updateShouldNotify(TimerServiceProvider old) => service != old.service;
+}
 
 class MyApp extends StatelessWidget {
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
-      theme: ThemeData(
-
-        primarySwatch: Colors.blue,
-      ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      title: 'Service Demo',
+      home: MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-
-  final String title;
-
   @override
   _MyHomePageState createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 1;
-
-  void _incrementCounter() {
-    setState(() {
-      _counter++;
-    });
-  }
-
-  List<Widget> _createChildren(count){
-    List<int> array = [];
-    for(var i = 0; i < count; i++)
-      {
-        array.add(i);
-      }
-    return new List<Widget>.generate(array.length, (int index){
-      return Text((array[index]).toString());
-    });
-
-
-  }
-
   @override
   Widget build(BuildContext context) {
+    var timerService = TimerService.of(context);
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
+      appBar: AppBar(),
       body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-
-            children: _createChildren(_counter),
+        child: AnimatedBuilder(
+          animation: timerService, // listen to ChangeNotifier
+          builder: (context, child) {
+            // this part is rebuilt whenever notifyListeners() is called
+            return Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Text('Elapsed: ${timerService.currentDuration}'),
+                RaisedButton(
+                  onPressed: !timerService.isRunning ? timerService.start : timerService.stop,
+                  child: Text(!timerService.isRunning ? 'Start' : 'Stop'),
+                ),
+                RaisedButton(
+                  onPressed: timerService.reset,
+                  child: Text('Reset'),
+                )
+              ],
+            );
+          },
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
